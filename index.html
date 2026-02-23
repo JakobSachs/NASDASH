@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAS Dashboard</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; background: #111; color: #ccc; padding: 2rem; line-height: 1.6; }
+h1 { font-weight: normal; margin-bottom: 1.5rem; display: flex; justify-content: space-between; }
+h1 span { font-size: 0.9rem; color: #666; }
+h2 { font-size: 1rem; color: #888; margin-bottom: 0.75rem; font-weight: normal; }
+section { margin-bottom: 2rem; }
+.alert { color: #e55; margin-bottom: 0.3rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 2rem; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 0.25rem 0; }
+td:last-child { text-align: right; }
+.ok { color: #5a5; }
+.warn { color: #da5; }
+.bad { color: #e55; }
+.bar { background: #333; height: 6px; border-radius: 3px; margin: 0.5rem 0; }
+.bar div { background: #5a5; height: 100%; border-radius: 3px; }
+.bar div.warn { background: #da5; }
+.bar div.bad { background: #e55; }
+.drive { background: #1a1a1a; padding: 0.75rem; margin-bottom: 0.5rem; border-radius: 4px; }
+.drive-head { display: flex; justify-content: space-between; margin-bottom: 0.25rem; font-weight: 500; }
+a { color: #6af; }
+</style>
+</head>
+<body>
+<h1>NAS Dashboard <span id="time"></span></h1>
+
+<section id="alerts"></section>
+
+<div class="grid">
+  <section>
+    <h2>ZFS Storage</h2>
+    <table>
+      <tr><td>Pool</td><td id="pool">--</td></tr>
+      <tr><td>Used</td><td><span id="used">--</span> / <span id="total">--</span> (<span id="pct">--</span>%)</td></tr>
+    </table>
+    <div class="bar"><div id="usage-bar"></div></div>
+    <table>
+      <tr><td>Last Scrub</td><td id="scrub">--</td></tr>
+      <tr><td>Scrub Errors</td><td id="scrub-err">--</td></tr>
+    </table>
+    <h2 style="margin-top:1rem">Snapshots</h2>
+    <table id="snaps"></table>
+  </section>
+
+  <section>
+    <h2>Drives</h2>
+    <div id="drives"></div>
+  </section>
+
+  <section>
+    <h2>System</h2>
+    <table>
+      <tr><td>Uptime</td><td id="uptime">--</td></tr>
+      <tr><td>CPU</td><td id="cpu">--</td></tr>
+      <tr><td>Memory</td><td id="mem">--</td></tr>
+      <tr><td>Net In</td><td id="net-in">--</td></tr>
+      <tr><td>Net Out</td><td id="net-out">--</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Links</h2>
+    <a href="http://localhost:8384" target="_blank">Syncthing</a>
+  </section>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+const fmt=b=>b?(b/1024**Math.floor(Math.log(b)/Math.log(1024))).toFixed(1)+' '+['B','KB','MB','GB','TB'][Math.floor(Math.log(b)/Math.log(1024))]:'0 B';
+const age=t=>{const d=Date.now()/1000-t;return d<3600?Math.floor(d/60)+'m':d<86400?Math.floor(d/3600)+'h':Math.floor(d/86400)+'d'};
+const uptime=s=>[s/86400|0,s%86400/3600|0,s%3600/60|0].map((v,i)=>v?v+['d','h','m'][i]:'').filter(Boolean).join(' ')||'<1m';
+
+async function refresh(){
+  const d=await fetch('/api/status').then(r=>r.json());
+  
+  $('#alerts').innerHTML=(d.alerts||[]).map(a=>`<div class="alert">! ${a}</div>`).join('');
+  
+  const z=d.zfs||{}, pct=z.used_percent||0;
+  $('#pool').textContent=z.pool_state||'--';
+  $('#pool').className=z.pool_state==='ONLINE'?'ok':'bad';
+  $('#used').textContent=fmt(z.used);
+  $('#total').textContent=fmt(z.total);
+  $('#pct').textContent=pct.toFixed(1);
+  $('#usage-bar').style.width=pct+'%';
+  $('#usage-bar').className=pct>=90?'bad':pct>=80?'warn':'';
+  $('#scrub').textContent=z.last_scrub||'Never';
+  $('#scrub-err').textContent=z.scrub_errors??'--';
+  $('#snaps').innerHTML=(z.snapshots||[]).slice(0,6).map(s=>`<tr><td>${s.name}</td><td>${age(s.timestamp)} ago</td></tr>`).join('');
+  
+  $('#drives').innerHTML=(d.drives||[]).map(dr=>`<div class="drive"><div class="drive-head"><span>${dr.device}</span><span class="${dr.temperature>=50?'bad':dr.temperature>=40?'warn':'ok'}">${dr.temperature??'--'}C</span></div><table><tr><td>Health</td><td class="${dr.health==='Healthy'?'ok':'bad'}">${dr.health}</td></tr><tr><td>Model</td><td>${dr.model||'--'}</td></tr><tr><td>Power-on</td><td>${dr.power_on_hours?Math.floor(dr.power_on_hours/24)+'d':'--'}</td></tr><tr><td>Reallocated</td><td>${dr.reallocated_sectors??'--'}</td></tr><tr><td>Pending</td><td>${dr.pending_sectors??'--'}</td></tr></table></div>`).join('');
+  
+  const sys=d.system||{};
+  $('#uptime').textContent=uptime(sys.uptime||0);
+  $('#cpu').textContent=(sys.cpu_percent||0).toFixed(0)+'%';
+  $('#mem').textContent=fmt(sys.memory_used)+' / '+fmt(sys.memory_total);
+  $('#net-in').textContent=fmt(sys.net_rx_rate)+'/s';
+  $('#net-out').textContent=fmt(sys.net_tx_rate)+'/s';
+  $('#time').textContent=new Date().toLocaleTimeString();
+}
+refresh();setInterval(refresh,30000);
+</script>
+</body>
+</html>
