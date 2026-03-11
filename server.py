@@ -126,6 +126,8 @@ def collect_drives():
     return drives
 
 
+PHOTOS_DIR = os.environ.get("NASDASH_PHOTOS_DIR", "/tank/photos")
+
 _prev_net = None
 
 
@@ -185,6 +187,20 @@ def collect_system():
     return data
 
 
+def collect_photos():
+    data = {"total_bytes": 0, "file_count": 0}
+    if not os.path.isdir(PHOTOS_DIR):
+        return data
+    try:
+        if out := run(["du", "-sb", PHOTOS_DIR]):
+            data["total_bytes"] = int(out.split()[0])
+        if out := run(["find", PHOTOS_DIR, "-type", "f"]):
+            data["file_count"] = len(out.strip().split("\n")) if out.strip() else 0
+    except:
+        pass
+    return data
+
+
 def generate_alerts(data):
     alerts = []
     zfs = data.get("zfs", {})
@@ -230,6 +246,7 @@ class Handler(BaseHTTPRequestHandler):
                 "zfs": collect_zfs(),
                 "drives": collect_drives(),
                 "system": collect_system(),
+                "photos": collect_photos(),
             }
             data["alerts"] = generate_alerts(data)
             self.send_response(200)

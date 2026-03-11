@@ -67,7 +67,13 @@ a { color: #6af; }
 
   <section>
     <h2>Links</h2>
-    <a href="http://localhost:8384" target="_blank">Syncthing</a>
+    <a href="http://localhost:8384" target="_blank">Syncthing</a><br>
+    <a href="http://192.168.0.179:2283/photos" target="_blank">Immich Photos</a>
+    <h2 style="margin-top:1rem">Photos</h2>
+    <table>
+      <tr><td>Library Size</td><td id="photos-size">--</td></tr>
+      <tr><td>Files</td><td id="photos-count">--</td></tr>
+    </table>
   </section>
 </div>
 
@@ -102,6 +108,9 @@ async function refresh(){
   $('#mem').textContent=fmt(sys.memory_used)+' / '+fmt(sys.memory_total);
   $('#net-in').textContent=fmt(sys.net_rx_rate)+'/s';
   $('#net-out').textContent=fmt(sys.net_tx_rate)+'/s';
+  const ph=d.photos||{};
+  $('#photos-size').textContent=fmt(ph.total_bytes);
+  $('#photos-count').textContent=(ph.file_count||0).toLocaleString();
   $('#time').textContent=new Date().toLocaleTimeString();
 }
 refresh();setInterval(refresh,30000);
