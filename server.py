@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """NAS Dashboard - Single-file server with ZFS, SMART, and system monitoring."""
 
-import json, os, re, subprocess, time
+import json, os, re, subprocess, threading, time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -127,6 +127,7 @@ def collect_drives():
 
 
 PHOTOS_DIR = os.environ.get("NASDASH_PHOTOS_DIR", "/tank/photos")
+IMMICH_DIR = os.environ.get("NASDASH_IMMICH_DIR", "/tank/immich")
 
 _prev_net = None
 
@@ -187,18 +188,58 @@ def collect_system():
     return data
 
 
+def _dir_size(path):
+    """Return total bytes for a directory via du -sb."""
+    if out := run(["du", "-sb", path]):
+        return int(out.split()[0])
+    return 0
+
+
+def _file_count(path):
+    """Return file count for a directory via find."""
+    if out := run(["find", path, "-type", "f"]):
+        return len(out.strip().split("\n")) if out.strip() else 0
+    return 0
+
+
+_photos_cache = {
+    "photos_bytes": 0,
+    "photos_files": 0,
+    "upload_bytes": 0,
+    "upload_files": 0,
+    "encoded_bytes": 0,
+}
+_photos_lock = threading.Lock()
+
+
+def _refresh_photos():
+    """Background thread that recalculates photo stats every 5 minutes."""
+    while True:
+        data = {}
+        try:
+            if os.path.isdir(PHOTOS_DIR):
+                data["photos_bytes"] = _dir_size(PHOTOS_DIR)
+                data["photos_files"] = _file_count(PHOTOS_DIR)
+            upload = os.path.join(IMMICH_DIR, "upload")
+            if os.path.isdir(upload):
+                data["upload_bytes"] = _dir_size(upload)
+                data["upload_files"] = _file_count(upload)
+            encoded = os.path.join(IMMICH_DIR, "encoded-video")
+            if os.path.isdir(encoded):
+                data["encoded_bytes"] = _dir_size(encoded)
+        except:
+            pass
+        with _photos_lock:
+            _photos_cache.update(data)
+        time.sleep(300)
+
+
+threading.Thread(target=_refresh_photos, daemon=True).start()
+
+
 def collect_photos():
-    data = {"total_bytes": 0, "file_count": 0}
-    if not os.path.isdir(PHOTOS_DIR):
-        return data
-    try:
-        if out := run(["du", "-sb", PHOTOS_DIR]):
-            data["total_bytes"] = int(out.split()[0])
-        if out := run(["find", PHOTOS_DIR, "-type", "f"]):
-            data["file_count"] = len(out.strip().split("\n")) if out.strip() else 0
-    except:
-        pass
-    return data
+    with _photos_lock:
+        return dict(_photos_cache)
 
 
 def generate_alerts(data):

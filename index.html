@@ -71,8 +71,14 @@ a { color: #6af; }
     <a href="http://192.168.0.179:2283/photos" target="_blank">Immich Photos</a>
     <h2 style="margin-top:1rem">Photos</h2>
     <table>
-      <tr><td>Library Size</td><td id="photos-size">--</td></tr>
+      <tr><td>Library</td><td id="photos-size">--</td></tr>
       <tr><td>Files</td><td id="photos-count">--</td></tr>
+    </table>
+    <h2 style="margin-top:1rem">Immich</h2>
+    <table>
+      <tr><td>Originals</td><td id="immich-upload">--</td></tr>
+      <tr><td>Files</td><td id="immich-count">--</td></tr>
+      <tr><td>Encoded Video</td><td id="immich-encoded">--</td></tr>
     </table>
   </section>
 </div>
@@ -109,8 +115,11 @@ async function refresh(){
   $('#net-in').textContent=fmt(sys.net_rx_rate)+'/s';
   $('#net-out').textContent=fmt(sys.net_tx_rate)+'/s';
   const ph=d.photos||{};
-  $('#photos-size').textContent=fmt(ph.total_bytes);
-  $('#photos-count').textContent=(ph.file_count||0).toLocaleString();
+  $('#photos-size').textContent=fmt(ph.photos_bytes);
+  $('#photos-count').textContent=(ph.photos_files||0).toLocaleString();
+  $('#immich-upload').textContent=fmt(ph.upload_bytes);
+  $('#immich-count').textContent=(ph.upload_files||0).toLocaleString();
+  $('#immich-encoded').textContent=fmt(ph.encoded_bytes);
   $('#time').textContent=new Date().toLocaleTimeString();
 }
 refresh();setInterval(refresh,30000);
